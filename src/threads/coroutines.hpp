@@ -14,6 +14,47 @@
 namespace Threads
 {
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+////////// Return Value /////////////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+    struct ReturnValue
+    {
+        struct promise_type
+        {
+            int Value = 0;
+
+            ReturnValue get_return_object()
+            {
+                return ReturnValue{ std::coroutine_handle<promise_type>::from_promise(*this) };
+            }
+
+            std::suspend_never initial_suspend() noexcept { return { }; }
+            std::suspend_always final_suspend() noexcept { return { }; } // keep frame alive
+            
+            void return_value(int value) noexcept { Value = value; }
+            void unhandled_exception() { std::terminate(); }
+        };
+
+        std::coroutine_handle<promise_type> Handle;
+
+        explicit ReturnValue(std::coroutine_handle<promise_type> handle) : Handle(handle) { }
+
+        ReturnValue(ReturnValue&& other) noexcept : Handle(other.Handle) { other.Handle = {}; }
+        ReturnValue(const ReturnValue& other) = delete;
+
+        ReturnValue& operator=(const ReturnValue&) = delete;
+
+        ~ReturnValue() { if (Handle) Handle.destroy(); }
+
+        int Get() const { return Handle.promise().Value; }
+    };
+
+    ReturnValue ComputeValue()
+    {
+        co_return 128;
+    }
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ////////// Asynchronous I/O Operations //////////////////////////////////////////////////////////////////////////
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -136,13 +177,13 @@ namespace Threads
 
         static TaskAwaiter MoveEntity(int id, int distance)
         {
-            std::cout << "Entity " << id << " moving " << distance << " units\n";
+            std::cout << "Entity " << id << " Moving " << distance << " units\n";
             return TaskAwaiter { std::chrono::milliseconds(500 * distance) };
         }
 
         static TaskAwaiter UpdateEntity(int id)
         {
-            std::cout << "Entity " << id << " updating\n";
+            std::cout << "Entity " << id << " Updating\n";
             return TaskAwaiter { std::chrono::milliseconds(100) };
         }
     };
@@ -312,6 +353,9 @@ namespace Threads
 
     void TestCoroutines()
     {
+        ReturnValue result = ComputeValue();
+        std::cout << "Computed Value: " << result.Get() << std::endl;
+
         FileReader fileReader = ProcessFiles();
         fileReader.Handle.resume(); // start and run to completion
 
@@ -326,7 +370,7 @@ namespace Threads
         {
             for (int i = 0; i < 5; ++i)
             {
-                queue.push( { i, "EventData" + std::to_string(i) } );
+                queue.push( { i, "EventData " + std::to_string(i) } );
                 std::this_thread::sleep_for(std::chrono::milliseconds(300));
             }
         });
